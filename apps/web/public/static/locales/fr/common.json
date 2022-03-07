@@ -513,6 +513,8 @@
   "first_day_of_week": "Premier jour de la semaine",
   "single_theme": "Thème unique",
   "brand_color": "Couleur de la marque",
+  "light_brand_color": "Couleur de la marque (thème clair)",
+  "dark_brand_color": "Couleur de la marque (thème sombre)",
   "file_not_named": "Le fichier n'est pas nommé [idOrSlug]/[user]",
   "create_team": "Créer une équipe",
   "name": "Nom",
