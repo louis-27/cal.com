@@ -1,12 +1,10 @@
-import { SearchIcon, LinkIcon } from "@heroicons/react/outline";
+import type { Dispatch, SetStateAction } from "react";
 import { useState } from "react";
-import { Dispatch, SetStateAction } from "react";
 
 import classNames from "@calcom/lib/classNames";
 import { useLocale } from "@calcom/lib/hooks/useLocale";
-import { Alert } from "@calcom/ui/Alert";
-import Button from "@calcom/ui/Button";
-import { Dialog, DialogClose, DialogContent, DialogFooter } from "@calcom/ui/Dialog";
+import type { IconName } from "@calcom/ui";
+import { Alert, Button, Dialog, DialogClose, DialogContent, DialogFooter, Icon, Input } from "@calcom/ui";
 
 interface ISearchDialog {
   isOpenDialog: boolean;
@@ -24,15 +22,15 @@ export const SearchDialog = (props: ISearchDialog) => {
   const [nextOffset, setNextOffset] = useState<number>(0);
   const [keyword, setKeyword] = useState<string>("");
   const { isOpenDialog, setIsOpenDialog } = props;
-  const [isLoading, setIsLoading] = useState(false);
+  const [isPending, setIsPending] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [selectedMode, setSelectedMode] = useState<Mode>(MODE_SEARCH);
 
   const searchGiphy = async (keyword: string, offset: number) => {
-    if (isLoading) {
+    if (isPending) {
       return;
     }
-    setIsLoading(true);
+    setIsPending(true);
     setErrorMessage("");
     const res = await fetch("/api/integrations/giphy/search", {
       method: "POST",
@@ -54,15 +52,15 @@ export const SearchDialog = (props: ISearchDialog) => {
         setErrorMessage("No Result found");
       }
     }
-    setIsLoading(false);
+    setIsPending(false);
     return null;
   };
 
   const getGiphyByUrl = async (url: string) => {
-    if (isLoading) {
+    if (isPending) {
       return;
     }
-    setIsLoading(true);
+    setIsPending(true);
     setErrorMessage("");
     const res = await fetch("/api/integrations/giphy/get", {
       method: "POST",
@@ -82,22 +80,22 @@ export const SearchDialog = (props: ISearchDialog) => {
         setErrorMessage("No Result found");
       }
     }
-    setIsLoading(false);
+    setIsPending(false);
     return null;
   };
 
-  const renderTab = (Icon: any, text: string, mode: Mode) => (
+  const renderTab = (iconName: IconName, text: string, mode: Mode) => (
     <div
       className={classNames(
-        "flex cursor-pointer items-center border-b-2 p-2 text-sm",
-        selectedMode === mode ? "border-black" : "border-transparent text-gray-500"
+        "flex cursor-pointer items-center border-b-2 p-2 text-sm ",
+        selectedMode === mode ? "text-default border-emphasis" : "text-subtle border-transparent"
       )}
       onClick={() => {
         setKeyword("");
         setGifImage("");
         setSelectedMode(mode);
       }}>
-      <Icon color={selectedMode === mode ? "black" : "grey"} className="mr-2 h-4 w-4" />
+      <Icon name={iconName} className="h-4 w-4 ltr:mr-2 rtl:ml-2" />
       {text}
     </div>
   );
@@ -115,19 +113,20 @@ export const SearchDialog = (props: ISearchDialog) => {
   return (
     <Dialog open={isOpenDialog} onOpenChange={setIsOpenDialog}>
       <DialogContent>
-        <h3 className="leading-16 font-cal text-xl text-gray-900" id="modal-title">
+        <h3 className="leading-16 font-cal text-emphasis text-xl" id="modal-title">
           {t("add_gif_to_confirmation")}
         </h3>
-        <p className="mb-3 text-sm font-light text-neutral-500">{t("find_gif_spice_confirmation")}</p>
-        <div className="flex items-center border-b border-solid">
-          {renderTab(SearchIcon, t("search_giphy"), MODE_SEARCH)}
-          {renderTab(LinkIcon, t("add_link_from_giphy"), MODE_URL)}
+        <p className="text-subtle mb-3 text-sm font-light">{t("find_gif_spice_confirmation")}</p>
+        <div className="border-emphasis flex items-center border-b border-solid">
+          {renderTab("search", t("search_giphy"), MODE_SEARCH)}
+          {renderTab("link", t("add_link_from_giphy"), MODE_URL)}
         </div>
-        <form className="flex w-full justify-center space-x-2 space-y-2" onSubmit={handleFormSubmit}>
+        <form
+          className="flex w-full justify-center space-x-2 space-y-2 rtl:space-x-reverse"
+          onSubmit={handleFormSubmit}>
           <div className="relative block w-full pt-2">
-            <input
+            <Input
               type="text"
-              className="block w-full rounded-sm border-gray-300 shadow-sm sm:text-sm"
               placeholder={
                 selectedMode === MODE_SEARCH
                   ? t("search_giphy")
@@ -139,17 +138,17 @@ export const SearchDialog = (props: ISearchDialog) => {
               }}
             />
           </div>
-          <Button type="submit" tabIndex={-1} color="secondary" loading={isLoading}>
+          <Button type="submit" tabIndex={-1} color="secondary" loading={isPending}>
             {t("search")}
           </Button>
         </form>
         {gifImage && (
-          <div className="flex flex-col items-center space-x-2 space-y-2 pt-3">
-            <div className="flex w-full items-center justify-center bg-gray-100">
-              {isLoading ? (
-                <div className="flex h-[200px] w-full items-center justify-center bg-gray-400 pt-3 pb-3">
+          <div className="flex flex-col items-center space-x-2 space-y-2 pt-3 rtl:space-x-reverse">
+            <div className="bg-subtle flex w-full items-center justify-center">
+              {isPending ? (
+                <div className="flex h-[200px] w-full items-center justify-center bg-gray-400 pb-3 pt-3">
                   <svg
-                    className={classNames("mx-4 h-5 w-5 animate-spin", "text-white dark:text-black")}
+                    className={classNames("mx-4 h-5 w-5 animate-spin", "text-inverted dark:text-emphasis")}
                     xmlns="http://www.w3.org/2000/svg"
                     fill="none"
                     viewBox="0 0 24 24">
@@ -159,28 +158,30 @@ export const SearchDialog = (props: ISearchDialog) => {
                       cy="12"
                       r="10"
                       stroke="currentColor"
-                      strokeWidth="4"></circle>
+                      strokeWidth="4"
+                    />
                     <path
                       className="opacity-75"
                       fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    />
                   </svg>
                 </div>
               ) : (
-                <img className="h-[200px] pt-3 pb-3" src={gifImage} alt={`Gif from Giphy for ${keyword}`} />
+                <img className="h-[200px] pb-3 pt-3" src={gifImage} alt={`Gif from Giphy for ${keyword}`} />
               )}
             </div>
           </div>
         )}
         {errorMessage && <Alert severity="error" title={errorMessage} className="my-4" />}
         {gifImage && selectedMode === MODE_SEARCH && (
-          <div className="mt-4 flex items-center justify-between space-x-2">
-            <div className="text-sm font-light text-neutral-500">Not the perfect GIF?</div>
+          <div className="mt-4 flex items-center justify-between space-x-2 rtl:space-x-reverse">
+            <div className="text-subtle text-sm font-light">Not the perfect GIF?</div>
             <Button
               size="sm"
               color="secondary"
               type="button"
-              loading={isLoading}
+              loading={isPending}
               onClick={() => searchGiphy(keyword, nextOffset)}>
               Shuffle
             </Button>
@@ -188,13 +189,12 @@ export const SearchDialog = (props: ISearchDialog) => {
         )}
         <DialogFooter>
           <DialogClose
+            color="minimal"
+            tabIndex={-1}
             onClick={() => {
               props.setIsOpenDialog(false);
-            }}
-            asChild>
-            <Button type="button" color="minimal" tabIndex={-1}>
-              {t("cancel")}
-            </Button>
+            }}>
+            {t("cancel")}
           </DialogClose>
 
           <Button

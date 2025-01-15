@@ -1,8 +1,12 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 
+import { getSafeRedirectUrl } from "@calcom/lib/getSafeRedirectUrl";
 import prisma from "@calcom/prisma";
 
 import getAppKeysFromSlug from "../../_utils/getAppKeysFromSlug";
+import getInstalledAppPath from "../../_utils/getInstalledAppPath";
+import createOAuthAppCredential from "../../_utils/oauth/createOAuthAppCredential";
+import { decodeOAuthState } from "../../_utils/oauth/decodeOAuthState";
 
 let client_id = "";
 let client_secret = "";
@@ -15,6 +19,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   const code = req.query.code as string;
+  const state = decodeOAuthState(req);
 
   const appKeys = await getAppKeysFromSlug("tandem");
   if (typeof appKeys.client_id === "string") client_id = appKeys.client_id;
@@ -34,25 +39,34 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const responseBody = await result.json();
 
+  const userId = req.session?.user.id;
+  if (!userId) {
+    return res.status(404).json({ message: "No user found" });
+  }
+
+  const existingCredentialTandemVideo = await prisma.credential.findMany({
+    select: {
+      id: true,
+    },
+    where: {
+      type: "tandem_video",
+      userId: req.session?.user.id,
+      appId: "tandem",
+    },
+  });
+
+  const credentialIdsToDelete = existingCredentialTandemVideo.map((item) => item.id);
+  if (credentialIdsToDelete.length > 0) {
+    await prisma.credential.deleteMany({ where: { id: { in: credentialIdsToDelete }, userId } });
+  }
   if (result.ok) {
     responseBody.expiry_date = Math.round(Date.now() + responseBody.expires_in * 1000);
     delete responseBody.expires_in;
 
-    await prisma.user.update({
-      where: {
-        id: req.session?.user.id,
-      },
-      data: {
-        credentials: {
-          create: {
-            type: "tandem_video",
-            key: responseBody,
-            appId: "tandem",
-          },
-        },
-      },
-    });
-  }
+    await createOAuthAppCredential({ appId: "tandem", type: "tandem_video" }, responseBody, req);
 
-  res.redirect("/apps/installed");
+    res.redirect(
+      getSafeRedirectUrl(state?.returnTo) ?? getInstalledAppPath({ variant: "conferencing", slug: "tandem" })
+    );
+  }
 }

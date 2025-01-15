@@ -1,9 +1,6 @@
-import dayjs from "dayjs";
-import utc from "dayjs/plugin/utc";
+import { expect, it } from "vitest";
 
-import { parseZone } from "@lib/parseZone";
-
-dayjs.extend(utc);
+import { parseZone } from "@calcom/lib/parse-zone";
 
 const EXPECTED_DATE_STRING = "2021-06-20T11:59:59+02:00";
 

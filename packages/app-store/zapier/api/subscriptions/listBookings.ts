@@ -1,45 +1,36 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 
-import findValidApiKey from "@calcom/ee/lib/api/findValidApiKey";
-import prisma, { bookingMinimalSelect } from "@calcom/prisma";
+import { listBookings } from "@calcom/features/webhooks/lib/scheduleTrigger";
+import { defaultHandler, defaultResponder } from "@calcom/lib/server";
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const apiKey = req.query.apiKey as string;
+import { validateAccountOrApiKey } from "../../lib/validateAccountOrApiKey";
 
-  if (!apiKey) {
-    return res.status(401).json({ message: "No API key provided" });
+async function handler(req: NextApiRequest, res: NextApiResponse) {
+  const { account: authorizedAccount, appApiKey: validKey } = await validateAccountOrApiKey(req, [
+    "READ_BOOKING",
+  ]);
+  const bookings = await listBookings(validKey, authorizedAccount);
+
+  if (!bookings) {
+    return res.status(500).json({ message: "Unable to get bookings." });
   }
+  if (bookings.length === 0) {
+    const userInfo = validKey
+      ? validKey.userId
+      : authorizedAccount && !authorizedAccount.isTeam
+      ? authorizedAccount.name
+      : null;
+    const teamInfo = validKey
+      ? validKey.teamId
+      : authorizedAccount && authorizedAccount.isTeam
+      ? authorizedAccount.name
+      : null;
 
-  const validKey = await findValidApiKey(apiKey, "zapier");
-
-  if (!validKey) {
-    return res.status(401).json({ message: "API key not valid" });
+    return res.status(201).json([]);
   }
-
-  if (req.method === "GET") {
-    try {
-      const bookings = await prisma.booking.findMany({
-        take: 3,
-        where: {
-          userId: validKey.userId,
-        },
-        select: {
-          ...bookingMinimalSelect,
-          location: true,
-          attendees: {
-            select: {
-              name: true,
-              email: true,
-              timeZone: true,
-            },
-          },
-        },
-      });
-
-      res.status(201).json(bookings);
-    } catch (error) {
-      console.error(error);
-      return res.status(500).json({ message: "Unable to get bookings." });
-    }
-  }
+  res.status(201).json(bookings);
 }
+
+export default defaultHandler({
+  GET: Promise.resolve({ default: defaultResponder(handler) }),
+});

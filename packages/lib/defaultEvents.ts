@@ -1,15 +1,18 @@
-import type { EventTypeCustomInput } from "@prisma/client";
-import { PeriodType, SchedulingType, UserPlan } from "@prisma/client";
+import type { Prisma, SelectedCalendar } from "@prisma/client";
 
-const availability = [
-  {
-    days: [1, 2, 3, 4, 5],
-    startTime: new Date().getTime(),
-    endTime: new Date().getTime(),
-    date: new Date(),
-    scheduleId: null,
-  },
-];
+import { DailyLocationType } from "@calcom/app-store/locations";
+import slugify from "@calcom/lib/slugify";
+import { PeriodType, SchedulingType } from "@calcom/prisma/enums";
+import type { userSelect } from "@calcom/prisma/selects";
+import type { CustomInputSchema } from "@calcom/prisma/zod-utils";
+import { eventTypeMetaDataSchemaWithTypedApps } from "@calcom/prisma/zod-utils";
+import { EventTypeMetaDataSchema } from "@calcom/prisma/zod-utils";
+import type { CredentialPayload } from "@calcom/types/Credential";
+
+type User = Omit<Prisma.UserGetPayload<typeof userSelect>, "selectedCalendars"> & {
+  allSelectedCalendars: SelectedCalendar[];
+  userLevelSelectedCalendars: SelectedCalendar[];
+};
 
 type UsernameSlugLinkProps = {
   users: {
@@ -20,7 +23,6 @@ type UsernameSlugLinkProps = {
     bio?: string | null;
     avatar?: string | null;
     theme?: string | null;
-    plan?: UserPlan;
     away?: boolean;
     verified?: boolean | null;
     allowDynamicBooking?: boolean | null;
@@ -28,9 +30,37 @@ type UsernameSlugLinkProps = {
   slug: string;
 };
 
-const customInputs: EventTypeCustomInput[] = [];
+const user: User & { credentials: CredentialPayload[] } = {
+  metadata: null,
+  theme: null,
+  credentials: [],
+  username: "john.doe",
+  timeZone: "",
+  bufferTime: 0,
+  availability: [],
+  id: 0,
+  startTime: 0,
+  endTime: 0,
+  allSelectedCalendars: [],
+  userLevelSelectedCalendars: [],
+  schedules: [],
+  defaultScheduleId: null,
+  locale: "en",
+  email: "john.doe@example.com",
+  name: "John doe",
+  destinationCalendar: null,
+  hideBranding: true,
+  brandColor: "#797979",
+  darkBrandColor: "#efefef",
+  allowDynamicBooking: true,
+  timeFormat: 12,
+  travelSchedules: [],
+};
+
+const customInputs: CustomInputSchema[] = [];
 
 const commons = {
+  isDynamic: true,
   periodCountCalendarDays: true,
   periodStartDate: null,
   periodEndDate: null,
@@ -39,77 +69,74 @@ const commons = {
   periodType: PeriodType.UNLIMITED,
   periodDays: null,
   slotInterval: null,
-  locations: [{ type: "integrations:daily" }],
+  offsetStart: 0,
+  locations: [{ type: DailyLocationType }],
   customInputs,
   disableGuests: true,
   minimumBookingNotice: 120,
   schedule: null,
   timeZone: null,
   successRedirectUrl: "",
+  forwardParamsSuccessRedirect: true,
+  teamId: null,
+  scheduleId: null,
   availability: [],
   price: 0,
   currency: "usd",
   schedulingType: SchedulingType.COLLECTIVE,
   seatsPerTimeSlot: null,
+  seatsShowAttendees: null,
+  seatsShowAvailabilityCount: null,
+  onlyShowFirstAvailableSlot: false,
   id: 0,
-  metadata: {
-    smartContractAddress: "",
-  },
-  isWeb3Active: false,
   hideCalendarNotes: false,
-  recurringEvent: {},
+  hideCalendarEventDetails: false,
+  recurringEvent: null,
   destinationCalendar: null,
   team: null,
+  lockTimeZoneToggleOnBookingPage: false,
   requiresConfirmation: false,
+  requiresConfirmationForFreeEmail: false,
+  requiresBookerEmailVerification: false,
+  bookingLimits: null,
+  durationLimits: null,
   hidden: false,
   userId: 0,
-  users: [
-    {
-      id: 0,
-      plan: UserPlan.PRO,
-      email: "jdoe@example.com",
-      name: "John Doe",
-      username: "jdoe",
-      avatar: "",
-      hideBranding: true,
-      timeZone: "",
-      destinationCalendar: null,
-      credentials: [],
-      bufferTime: 0,
-      locale: "en",
-      theme: null,
-      brandColor: "#292929",
-      darkBrandColor: "#fafafa",
-    },
-  ],
+  parentId: null,
+  parent: null,
+  owner: null,
+  workflows: [],
+  users: [user],
+  hosts: [],
+  metadata: EventTypeMetaDataSchema.parse({}),
+  bookingFields: [],
+  assignAllTeamMembers: false,
+  assignRRMembersUsingSegment: false,
+  rrSegmentQueryValue: null,
+  isRRWeightsEnabled: false,
+  rescheduleWithSameRoundRobinHost: false,
+  useEventTypeDestinationCalendarEmail: false,
+  secondaryEmailId: null,
+  secondaryEmail: null,
+  autoTranslateDescriptionEnabled: false,
+  fieldTranslations: [],
+  maxLeadThreshold: null,
+  useEventLevelSelectedCalendars: false,
 };
 
-const min15Event = {
-  length: 15,
-  slug: "15",
-  title: "15min",
-  eventName: "Dynamic Collective 15min Event",
-  description: "Dynamic Collective 15min Event",
-  ...commons,
-};
-const min30Event = {
+export const dynamicEvent = {
   length: 30,
-  slug: "30",
-  title: "30min",
-  eventName: "Dynamic Collective 30min Event",
-  description: "Dynamic Collective 30min Event",
+  slug: "dynamic",
+  title: "Group Meeting",
+  eventName: "Group Meeting",
+  description: "Join us for a meeting with multiple people",
+  descriptionAsSafeHTML: "",
+  position: 0,
   ...commons,
-};
-const min60Event = {
-  length: 60,
-  slug: "60",
-  title: "60min",
-  eventName: "Dynamic Collective 60min Event",
-  description: "Dynamic Collective 60min Event",
-  ...commons,
+  metadata: eventTypeMetaDataSchemaWithTypedApps.parse({ multipleDuration: [15, 30, 45, 60, 90] }),
 };
 
-const defaultEvents = [min15Event, min30Event, min60Event];
+export const defaultEvents = [dynamicEvent];
 
 export const getDynamicEventDescription = (dynamicUsernames: string[], slug: string): string => {
   return `Book a ${slug} min event with ${dynamicUsernames.join(", ")}`;
@@ -124,7 +151,7 @@ export const getDefaultEvent = (slug: string) => {
   const event = defaultEvents.find((obj) => {
     return obj.slug === slug;
   });
-  return event || min15Event;
+  return event || dynamicEvent;
 };
 
 export const getGroupName = (usernameList: string[]): string => {
@@ -142,29 +169,19 @@ export const getUsernameSlugLink = ({ users, slug }: UsernameSlugLinkProps): str
   return slugLink;
 };
 
+const arrayCast = (value: unknown | unknown[]) => {
+  return Array.isArray(value) ? value : value ? [value] : [];
+};
+
 export const getUsernameList = (users: string | string[] | undefined): string[] => {
-  if (!users) {
-    return [];
-  }
-  if (!(users instanceof Array)) {
-    users = [users];
-  }
-  const allUsers: string[] = [];
   // Multiple users can come in case of a team round-robin booking and in that case dynamic link won't be a user.
   // So, even though this code handles even if individual user is dynamic link, that isn't a possibility right now.
-  users.forEach((user) => {
-    allUsers.push(
-      ...user
-        ?.toLowerCase()
-        .replace(/ /g, "+")
-        .replace(/%20/g, "+")
-        .split("+")
-        .filter((el) => {
-          return el.length != 0;
-        })
-    );
-  });
-  return allUsers;
+  users = arrayCast(users);
+
+  const allUsers = users.map((user) => user.replace(/( |%20|%2b)/g, "+").split("+")).flat();
+  return Array.prototype.concat(...allUsers.map((userSlug) => slugify(userSlug)));
 };
 
 export default defaultEvents;
+
+export type DefaultEvent = Awaited<ReturnType<typeof getDefaultEvent>>;

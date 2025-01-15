@@ -1,19 +1,16 @@
-import { ClockIcon, XIcon } from "@heroicons/react/outline";
-import dayjs from "dayjs";
-import { Dispatch, SetStateAction } from "react";
+import { useMutation } from "@tanstack/react-query";
+import type { Dispatch, SetStateAction } from "react";
 import { useState } from "react";
-import { useMutation } from "react-query";
 
+import dayjs from "@calcom/dayjs";
 import { useLocale } from "@calcom/lib/hooks/useLocale";
 import logger from "@calcom/lib/logger";
-import showToast from "@calcom/lib/notification";
-import Button from "@calcom/ui/Button";
-import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader } from "@calcom/ui/Dialog";
+import { trpc } from "@calcom/trpc/react";
+import { Button, Dialog, DialogContent, DialogFooter, DialogHeader, Icon, showToast } from "@calcom/ui";
 
 interface IConfirmDialogWipe {
   isOpenDialog: boolean;
   setIsOpenDialog: Dispatch<SetStateAction<boolean>>;
-  trpc: any;
 }
 
 interface IWipeMyCalAction {
@@ -29,7 +26,7 @@ const wipeMyCalAction = async (props: IWipeMyCalAction) => {
   };
   try {
     const endpoint = "/api/integrations/wipemycalother/wipe";
-    return fetch(`${process.env.NEXT_PUBLIC_APP_BASE_URL}` + endpoint, {
+    return fetch(`${process.env.NEXT_PUBLIC_WEBAPP_URL}${endpoint}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -45,18 +42,18 @@ const wipeMyCalAction = async (props: IWipeMyCalAction) => {
 
 export const ConfirmDialog = (props: IConfirmDialogWipe) => {
   const { t } = useLocale();
-  const { isOpenDialog, setIsOpenDialog, trpc } = props;
-  const [isLoading, setIsLoading] = useState(false);
+  const { isOpenDialog, setIsOpenDialog } = props;
+  const [isPending, setIsPending] = useState(false);
   const today = dayjs();
   const initialDate = today.startOf("day");
   const endDate = today.endOf("day");
   const dateFormat = "ddd, MMM D, YYYY h:mm A";
 
-  const utils = trpc.useContext();
+  const utils = trpc.useUtils();
 
-  const rescheduleApi = useMutation(
-    async () => {
-      setIsLoading(true);
+  const rescheduleApi = useMutation({
+    mutationFn: async () => {
+      setIsPending(true);
       try {
         const result = await wipeMyCalAction({
           initialDate: initialDate.toISOString(),
@@ -68,43 +65,43 @@ export const ConfirmDialog = (props: IConfirmDialogWipe) => {
         }
       } catch (error) {
         showToast(t("unexpected_error_try_again"), "error");
-        // @TODO: notify sentry
+        // @TODO: notify
       }
-      setIsLoading(false);
+      setIsPending(false);
     },
-    {
-      async onSettled() {
-        await utils.invalidateQueries(["viewer.bookings"]);
-      },
-    }
-  );
+    async onSettled() {
+      await utils.viewer.bookings.invalidate();
+    },
+  });
 
   return (
     <Dialog open={isOpenDialog} onOpenChange={setIsOpenDialog}>
-      <DialogContent>
+      <DialogContent onOpenAutoFocus={(e) => e.preventDefault()}>
         <div className="flex flex-row space-x-3">
           <div className="flex h-10 w-10 flex-shrink-0 justify-center rounded-full bg-[#FAFAFA]">
-            <ClockIcon className="m-auto h-6 w-6"></ClockIcon>
+            <Icon name="clock" className="m-auto h-5 w-5" />
           </div>
           <div className="pt-1">
-            <DialogHeader title={"Wipe My Calendar"} />
-            <p className="mt-2 text-sm text-gray-500">
+            <DialogHeader title="Wipe My Calendar" />
+            <p className="text-subtle mt-2 text-sm">
               This will cancel all upcoming meetings from: <br />{" "}
-              <strong className="text-black">
+              <strong className="text-emphasis">
                 {initialDate.format(dateFormat)} - {endDate.format(dateFormat)}
               </strong>
             </p>
-            <p className="mt-6 mb-2 text-sm font-bold text-black">Are you sure? This can&apos;t be undone</p>
+            <p className="mb-2 mt-6 text-sm">Are you sure? This can&apos;t be undone</p>
           </div>
         </div>
 
         <DialogFooter>
-          <DialogClose>
-            <Button color="secondary">{t("cancel")}</Button>
-          </DialogClose>
+          <Button color="secondary" onClick={() => setIsOpenDialog(false)}>
+            {t("cancel")}
+          </Button>
+
           <Button
+            color="primary"
             data-testid="send_request"
-            disabled={isLoading}
+            disabled={isPending}
             onClick={async () => {
               try {
                 rescheduleApi.mutate();

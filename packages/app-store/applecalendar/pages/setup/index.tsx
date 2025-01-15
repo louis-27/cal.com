@@ -1,12 +1,11 @@
-import { useRouter } from "next/router";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { Toaster } from "react-hot-toast";
 
+import { APP_NAME } from "@calcom/lib/constants";
 import { useLocale } from "@calcom/lib/hooks/useLocale";
-import { Alert } from "@calcom/ui/Alert";
-import Button from "@calcom/ui/Button";
-import { Form, TextField } from "@calcom/ui/form/fields";
+import { Alert, Button, Form, PasswordField, TextField } from "@calcom/ui";
 
 export default function AppleCalendarSetup() {
   const { t } = useLocale();
@@ -21,9 +20,9 @@ export default function AppleCalendarSetup() {
   const [errorMessage, setErrorMessage] = useState("");
 
   return (
-    <div className="flex h-screen bg-gray-200">
-      <div className="m-auto rounded bg-white p-5 md:w-[560px] md:p-10">
-        <div className="flex flex-col space-y-5 md:flex-row md:space-y-0 md:space-x-5">
+    <div className="bg-emphasis flex h-screen dark:bg-inherit">
+      <div className="bg-default dark:bg-muted border-subtle m-auto rounded p-5 dark:border md:w-[560px] md:p-10">
+        <div className="flex flex-col space-y-5 md:flex-row md:space-x-5 md:space-y-0">
           <div>
             {/* eslint-disable @next/next/no-img-element */}
             <img
@@ -33,60 +32,76 @@ export default function AppleCalendarSetup() {
             />
           </div>
           <div>
-            <h1 className="text-gray-600">Connect to Apple Server</h1>
+            <h1 className="text-default dark:text-emphasis mb-3 font-semibold">
+              {t("connect_apple_server")}
+            </h1>
 
             <div className="mt-1 text-sm">
-              Generate an app specific password to use with Cal.com at{" "}
+              {t("apple_server_generate_password", { appName: APP_NAME })}{" "}
               <a
-                className="text-indigo-400"
+                className="font-bold hover:underline"
                 href="https://appleid.apple.com/account/manage"
                 target="_blank"
                 rel="noopener noreferrer">
                 https://appleid.apple.com/account/manage
               </a>
-              . Your credentials will be stored and encrypted.
+              . {t("credentials_stored_encrypted")}
             </div>
-            <div className="my-2 mt-3">
+            <div className="my-2 mt-4">
               <Form
                 form={form}
                 handleSubmit={async (values) => {
-                  setErrorMessage("");
-                  const res = await fetch("/api/integrations/applecalendar/add", {
-                    method: "POST",
-                    body: JSON.stringify(values),
-                    headers: {
-                      "Content-Type": "application/json",
-                    },
-                  });
-                  const json = await res.json();
-                  if (!res.ok) {
-                    setErrorMessage(json?.message || "Something went wrong");
-                  } else {
-                    router.push(json.url);
+                  try {
+                    setErrorMessage("");
+                    const res = await fetch("/api/integrations/applecalendar/add", {
+                      method: "POST",
+                      body: JSON.stringify(values),
+                      headers: {
+                        "Content-Type": "application/json",
+                      },
+                    });
+                    const json = await res.json();
+                    if (!res.ok) {
+                      setErrorMessage(t(json?.message) || t("something_went_wrong"));
+                    } else {
+                      router.push(json.url);
+                    }
+                  } catch (err) {
+                    setErrorMessage(t("unable_to_add_apple_calendar"));
                   }
                 }}>
-                <fieldset className="space-y-2" disabled={form.formState.isSubmitting}>
+                <fieldset
+                  className="space-y-4"
+                  disabled={form.formState.isSubmitting}
+                  data-testid="apple-calendar-form">
                   <TextField
                     required
                     type="text"
                     {...form.register("username")}
-                    label="Username"
-                    placeholder="rickroll"
+                    label="Apple ID"
+                    placeholder="appleid@domain.com"
+                    data-testid="apple-calendar-email"
                   />
-                  <TextField
+                  <PasswordField
                     required
-                    type="password"
                     {...form.register("password")}
-                    label="Password"
+                    label={t("password")}
                     placeholder="•••••••••••••"
                     autoComplete="password"
+                    data-testid="apple-calendar-password"
                   />
                 </fieldset>
 
                 {errorMessage && <Alert severity="error" title={errorMessage} className="my-4" />}
-                <div className="mt-5 sm:mt-4 sm:flex sm:flex-row-reverse">
-                  <Button type="submit" loading={form.formState.isSubmitting}>
-                    Save
+                <div className="mt-5 justify-end space-x-2 rtl:space-x-reverse sm:mt-4 sm:flex">
+                  <Button type="button" color="secondary" onClick={() => router.back()}>
+                    {t("cancel")}
+                  </Button>
+                  <Button
+                    type="submit"
+                    loading={form.formState.isSubmitting}
+                    data-testid="apple-calendar-login-button">
+                    {t("save")}
                   </Button>
                 </div>
               </Form>

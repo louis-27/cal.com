@@ -1,19 +1,25 @@
-/* eslint-disable prefer-const */
+"use client";
+
 import { useEffect, useRef } from "react";
+
+import type { PrefillAndIframeAttrsConfig } from "@calcom/embed-core";
 
 import useEmbed from "./useEmbed";
 
-export default function Cal({
-  calLink,
-  calOrigin,
-  config,
-  embedJsUrl,
-}: {
+type CalProps = {
   calOrigin?: string;
   calLink: string;
-  config?: any;
+  initConfig?: {
+    debug?: boolean;
+    uiDebug?: boolean;
+  };
+  namespace?: string;
+  config?: PrefillAndIframeAttrsConfig;
   embedJsUrl?: string;
-}) {
+} & React.HTMLAttributes<HTMLDivElement>;
+
+const Cal = function Cal(props: CalProps) {
+  const { calLink, calOrigin, namespace = "", config, initConfig = {}, embedJsUrl, ...restProps } = props;
   if (!calLink) {
     throw new Error("calLink is required");
   }
@@ -21,26 +27,38 @@ export default function Cal({
   const Cal = useEmbed(embedJsUrl);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (!Cal || initializedRef.current) {
+    if (!Cal || initializedRef.current || !ref.current) {
       return;
     }
     initializedRef.current = true;
     const element = ref.current;
-    let initConfig = {};
-    if (calOrigin) {
-      (initConfig as any).origin = calOrigin;
+    if (namespace) {
+      Cal("init", namespace, {
+        ...initConfig,
+        origin: calOrigin,
+      });
+      Cal.ns[namespace]("inline", {
+        elementOrSelector: element,
+        calLink,
+        config,
+      });
+    } else {
+      Cal("init", {
+        ...initConfig,
+        origin: calOrigin,
+      });
+      Cal("inline", {
+        elementOrSelector: element,
+        calLink,
+        config,
+      });
     }
-    Cal("init", initConfig);
-    Cal("inline", {
-      elementOrSelector: element,
-      calLink,
-      config,
-    });
-  }, [Cal, calLink, config, calOrigin]);
+  }, [Cal, calLink, config, namespace, calOrigin, initConfig]);
 
   if (!Cal) {
-    return <div>Loading {calLink}</div>;
+    return null;
   }
 
-  return <div ref={ref}></div>;
-}
+  return <div ref={ref} {...restProps} />;
+};
+export default Cal;

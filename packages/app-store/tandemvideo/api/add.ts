@@ -12,8 +12,7 @@ let base_url = "";
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method === "GET") {
     // Get user
-    await prisma.user.findFirst({
-      rejectOnNotFound: true,
+    await prisma.user.findFirstOrThrow({
       where: {
         id: req.session?.user?.id,
       },
@@ -28,7 +27,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!client_id) return res.status(400).json({ message: "Tandem client_id missing." });
     if (!base_url) return res.status(400).json({ message: "Tandem base_url missing." });
 
-    const redirect_uri = encodeURI(WEBAPP_URL + "/api/integrations/tandemvideo/callback");
+    const redirect_uri = encodeURI(`${WEBAPP_URL}/api/integrations/tandemvideo/callback`);
 
     const params = {
       client_id,

@@ -1,10 +1,11 @@
-import PaymentPage from "@ee/components/stripe/PaymentPage";
-import { getServerSideProps } from "@ee/pages/payment/[uid]";
+import PaymentPage from "@calcom/features/ee/payments/components/PaymentPage";
+import { getServerSideProps } from "@calcom/features/ee/payments/pages/payment";
+import type { inferSSRProps } from "@calcom/types/inferSSRProps";
 
-import { inferSSRProps } from "@lib/types/inferSSRProps";
+import PageWrapper from "@components/PageWrapper";
 
 export default function Payment(props: inferSSRProps<typeof getServerSideProps>) {
   return <PaymentPage {...props} />;
 }
-
+Payment.PageWrapper = PageWrapper;
 export { getServerSideProps };

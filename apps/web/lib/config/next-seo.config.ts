@@ -1,10 +1,21 @@
-import { DefaultSeoProps } from "next-seo";
+import type { DefaultSeoProps, NextSeoProps } from "next-seo";
 
-import { HeadSeoProps } from "@components/seo/head-seo";
+import { APP_NAME, SEO_IMG_DEFAULT, SEO_IMG_OGIMG } from "@calcom/lib/constants";
+
+export type HeadSeoProps = {
+  title: string;
+  description: string;
+  siteName?: string;
+  name?: string;
+  url?: string;
+  username?: string;
+  canonical?: string;
+  nextSeoProps?: NextSeoProps;
+};
 
 const seoImages = {
-  default: "https://cal.com/og-image.png",
-  ogImage: "https://og-image-one-pi.vercel.app/",
+  default: SEO_IMG_DEFAULT,
+  ogImage: SEO_IMG_OGIMG,
 };
 
 export const getSeoImage = (key: keyof typeof seoImages): string => {
@@ -16,7 +27,7 @@ export const seoConfig: {
   defaultNextSeo: DefaultSeoProps;
 } = {
   headSeo: {
-    siteName: "Cal.com",
+    siteName: APP_NAME,
   },
   defaultNextSeo: {
     twitter: {

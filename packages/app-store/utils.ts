@@ -1,136 +1,115 @@
-import { Prisma } from "@prisma/client";
-import { TFunction } from "next-i18next";
+import type { AppCategories } from "@prisma/client";
 
-import type { App } from "@calcom/types/App";
-
-import { LocationType } from "./locations";
 // If you import this file on any app it should produce circular dependency
 // import appStore from "./index";
-import { appStoreMetadata } from "./metadata";
+import { appStoreMetadata } from "@calcom/app-store/appStoreMetaData";
+import type { EventLocationType } from "@calcom/app-store/locations";
+import logger from "@calcom/lib/logger";
+import { getPiiFreeCredential } from "@calcom/lib/piiFreeData";
+import { safeStringify } from "@calcom/lib/safeStringify";
+import type { App, AppMeta } from "@calcom/types/App";
+import type { CredentialPayload } from "@calcom/types/Credential";
 
-const ALL_APPS_MAP = Object.keys(appStoreMetadata).reduce((store, key) => {
-  store[key] = appStoreMetadata[key as keyof typeof appStoreMetadata];
-  return store;
-}, {} as Record<string, App>);
+export * from "./_utils/getEventTypeAppData";
 
-const credentialData = Prisma.validator<Prisma.CredentialArgs>()({
-  select: { id: true, type: true, key: true, userId: true, appId: true },
-});
-
-type CredentialData = Prisma.CredentialGetPayload<typeof credentialData>;
-
-export const ALL_APPS = Object.values(ALL_APPS_MAP);
-
-type OptionTypeBase = {
+export type LocationOption = {
   label: string;
-  value: LocationType;
+  value: EventLocationType["type"];
+  icon?: string;
   disabled?: boolean;
 };
 
-function translateLocations(locations: OptionTypeBase[], t: TFunction) {
-  return locations.map((l) => ({
-    ...l,
-    label: t(l.label),
-  }));
-}
-const defaultLocations: OptionTypeBase[] = [
-  { value: LocationType.InPerson, label: "in_person_meeting" },
-  { value: LocationType.Link, label: "link_meeting" },
-  { value: LocationType.Phone, label: "attendee_phone_number" },
-  { value: LocationType.UserPhone, label: "host_phone_number" },
-];
+const ALL_APPS_MAP = Object.keys(appStoreMetadata).reduce((store, key) => {
+  const metadata = appStoreMetadata[key as keyof typeof appStoreMetadata] as AppMeta;
 
-export function getLocationOptions(integrations: AppMeta, t: TFunction) {
-  const locations = [...defaultLocations];
-  integrations.forEach((app) => {
-    if (app.locationOption) {
-      locations.push(app.locationOption);
-    }
-  });
+  store[key] = metadata;
 
-  return translateLocations(locations, t);
-}
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  //@ts-ignore
+  delete store[key]["/*"];
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  //@ts-ignore
+  delete store[key]["__createdUsingCli"];
+  return store;
+}, {} as Record<string, AppMeta>);
+
+export type CredentialDataWithTeamName = CredentialPayload & {
+  team?: {
+    name: string;
+  } | null;
+};
+
+export const ALL_APPS = Object.values(ALL_APPS_MAP);
 
 /**
  * This should get all available apps to the user based on his saved
  * credentials, this should also get globally available apps.
  */
-function getApps(userCredentials: CredentialData[]) {
-  const apps = ALL_APPS.map((appMeta) => {
-    const credentials = userCredentials.filter((credential) => credential.type === appMeta.type);
-    let locationOption: OptionTypeBase | null = null;
+function getApps(credentials: CredentialDataWithTeamName[], filterOnCredentials?: boolean) {
+  const apps = ALL_APPS.reduce((reducedArray, appMeta) => {
+    const appCredentials = credentials.filter((credential) => credential.appId === appMeta.slug);
+
+    if (filterOnCredentials && !appCredentials.length && !appMeta.isGlobal) return reducedArray;
+
+    let locationOption: LocationOption | null = null;
 
     /** If the app is a globally installed one, let's inject it's key */
     if (appMeta.isGlobal) {
-      credentials.push({
-        id: +new Date().getTime(),
+      const credential = {
+        id: 0,
         type: appMeta.type,
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
         key: appMeta.key!,
-        userId: +new Date().getTime(),
+        userId: 0,
+        user: { email: "" },
+        teamId: null,
         appId: appMeta.slug,
-      });
+        invalid: false,
+        team: {
+          name: "Global",
+        },
+      };
+      logger.debug(
+        `${appMeta.type} is a global app, injecting credential`,
+        safeStringify(getPiiFreeCredential(credential))
+      );
+      appCredentials.push(credential);
     }
 
     /** Check if app has location option AND add it if user has credentials for it */
-    if (credentials.length > 0 && appMeta?.locationType) {
+    if (appCredentials.length > 0 && appMeta?.appData?.location) {
       locationOption = {
-        value: appMeta.locationType,
-        label: appMeta.locationLabel || "No label set",
+        value: appMeta.appData.location.type,
+        label: appMeta.appData.location.label || "No label set",
         disabled: false,
       };
     }
 
-    const credential: typeof credentials[number] | null = credentials[0] || null;
-    return {
+    const credential: (typeof appCredentials)[number] | null = appCredentials[0] || null;
+
+    reducedArray.push({
       ...appMeta,
       /**
        * @deprecated use `credentials`
        */
       credential,
-      credentials,
+      credentials: appCredentials,
       /** Option to display in `location` field while editing event types */
       locationOption,
-    };
-  });
+    });
+
+    return reducedArray;
+  }, [] as (App & { credential: CredentialDataWithTeamName; credentials: CredentialDataWithTeamName[]; locationOption: LocationOption | null })[]);
 
   return apps;
 }
 
-export type AppMeta = ReturnType<typeof getApps>;
+export function getLocalAppMetadata() {
+  return ALL_APPS;
+}
 
 export function hasIntegrationInstalled(type: App["type"]): boolean {
   return ALL_APPS.some((app) => app.type === type && !!app.installed);
-}
-
-export function getLocationTypes(): string[] {
-  return ALL_APPS.reduce((locations, app) => {
-    if (typeof app.locationType === "string") {
-      locations.push(app.locationType);
-    }
-    return locations;
-  }, [] as string[]);
-}
-
-export function getLocationLabels(t: TFunction) {
-  const defaultLocationLabels = defaultLocations.reduce((locations, location) => {
-    if(location.label === "attendee_phone_number") {
-      locations[location.value] = t("your_number")
-      return locations
-    }
-    if(location.label === "host_phone_number") {
-      locations[location.value] = `${t("phone_call")} (${t("number_provided")})`
-      return locations
-    }
-    locations[location.value] = t(location.label);
-    return locations;
-  }, {} as Record<LocationType, string>);
-
-  return ALL_APPS.reduce((locations, app) => {
-    if (typeof app.locationType === "string") {
-      locations[app.locationType] = t(app.locationLabel || "No label set");
-    }
-    return locations;
-  }, defaultLocationLabels);
 }
 
 export function getAppName(name: string): string | null {
@@ -148,5 +127,49 @@ export function getAppType(name: string): string {
   }
   return "Unknown";
 }
+
+export function getAppFromSlug(slug: string | undefined): AppMeta | undefined {
+  return ALL_APPS.find((app) => app.slug === slug);
+}
+
+export function getAppFromLocationValue(type: string): AppMeta | undefined {
+  return ALL_APPS.find((app) => app?.appData?.location?.type === type);
+}
+
+/**
+ *
+ * @param appCategories - from app metadata
+ * @param concurrentMeetings - from app metadata
+ * @returns - true if app supports team install
+ */
+export function doesAppSupportTeamInstall({
+  appCategories,
+  concurrentMeetings = undefined,
+  isPaid,
+}: {
+  appCategories: string[];
+  concurrentMeetings: boolean | undefined;
+  isPaid: boolean;
+}) {
+  // Paid apps can't be installed on team level - That isn't supported
+  if (isPaid) {
+    return false;
+  }
+  return !appCategories.some(
+    (category) =>
+      category === "calendar" ||
+      (defaultVideoAppCategories.includes(category as AppCategories) && !concurrentMeetings)
+  );
+}
+
+export function isConferencing(appCategories: string[]) {
+  return appCategories.some((category) => category === "conferencing" || category === "video");
+}
+export const defaultVideoAppCategories: AppCategories[] = [
+  "messaging",
+  "conferencing",
+  // Legacy name for conferencing
+  "video",
+];
 
 export default getApps;

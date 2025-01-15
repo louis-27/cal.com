@@ -1,14 +1,18 @@
-import { Prisma, Booking } from "@prisma/client";
-import dayjs from "dayjs";
+import { Prisma } from "@prisma/client";
 import short from "short-uuid";
 import { v5 as uuidv5 } from "uuid";
 
+import dayjs from "@calcom/dayjs";
+import { getRescheduleLink } from "@calcom/lib/CalEventParser";
+import logger from "@calcom/lib/logger";
+import { safeStringify } from "@calcom/lib/safeStringify";
 import { getTranslation } from "@calcom/lib/server/i18n";
 import prisma from "@calcom/prisma";
-import { CalendarEvent } from "@calcom/types/Calendar";
+import type { CalendarEvent } from "@calcom/types/Calendar";
 
 import { CalendarEventClass } from "./class";
 
+const log = logger.getSubLogger({ prefix: ["builders", "CalendarEvent", "builder"] });
 const translator = short();
 const userSelect = Prisma.validator<Prisma.UserArgs>()({
   select: {
@@ -24,7 +28,7 @@ const userSelect = Prisma.validator<Prisma.UserArgs>()({
   },
 });
 
-type User = Prisma.UserGetPayload<typeof userSelect>;
+type User = Omit<Prisma.UserGetPayload<typeof userSelect>, "selectedCalendars">;
 type PersonAttendeeCommonFields = Pick<User, "id" | "email" | "name" | "locale" | "timeZone" | "username">;
 interface ICalendarEventBuilder {
   calendarEvent: CalendarEventClass;
@@ -70,7 +74,7 @@ export class CalendarEventBuilder implements ICalendarEventBuilder {
     if (!this.eventType) {
       throw new Error("exec BuildEventObjectFromInnerClass before calling this function");
     }
-    let users = this.eventType.users;
+    const users = this.eventType.users;
 
     /* If this event was pre-relationship migration */
     if (!users.length && this.eventType.userId) {
@@ -94,8 +98,7 @@ export class CalendarEventBuilder implements ICalendarEventBuilder {
   private async getUserById(userId: number) {
     let resultUser: User | null;
     try {
-      resultUser = await prisma.user.findUnique({
-        rejectOnNotFound: true,
+      resultUser = await prisma.user.findUniqueOrThrow({
         where: {
           id: userId,
         },
@@ -110,8 +113,7 @@ export class CalendarEventBuilder implements ICalendarEventBuilder {
   private async getEventFromEventId(eventTypeId: number) {
     let resultEventType;
     try {
-      resultEventType = await prisma.eventType.findUnique({
-        rejectOnNotFound: true,
+      resultEventType = await prisma.eventType.findUniqueOrThrow({
         where: {
           id: eventTypeId,
         },
@@ -144,70 +146,14 @@ export class CalendarEventBuilder implements ICalendarEventBuilder {
           metadata: true,
           destinationCalendar: true,
           hideCalendarNotes: true,
+          hideCalendarEventDetails: true,
         },
       });
     } catch (error) {
       throw new Error("Error while getting eventType");
     }
+    log.debug("getEventFromEventId.resultEventType", safeStringify(resultEventType));
     return resultEventType;
-  }
-
-  public async buildLuckyUsers() {
-    if (!this.eventType && this.users && this.users.length) {
-      throw new Error("exec buildUsersFromInnerClass before calling this function");
-    }
-
-    // @TODO: user?.username gets flagged as null somehow, maybe a filter before map?
-    const filterUsernames = this.users.filter((user) => user && typeof user.username === "string");
-    const userUsernames = filterUsernames.map((user) => user.username) as string[]; // @TODO: hack
-    const users = await prisma.user.findMany({
-      where: {
-        username: { in: userUsernames },
-        eventTypes: {
-          some: {
-            id: this.eventType.id,
-          },
-        },
-      },
-      select: {
-        id: true,
-        username: true,
-        locale: true,
-      },
-    });
-
-    const userNamesWithBookingCounts = await Promise.all(
-      users.map(async (user) => ({
-        username: user.username,
-        bookingCount: await prisma.booking.count({
-          where: {
-            user: {
-              id: user.id,
-            },
-            startTime: {
-              gt: new Date(),
-            },
-            eventTypeId: this.eventType.id,
-          },
-        }),
-      }))
-    );
-    const luckyUsers = this.getLuckyUsers(this.users, userNamesWithBookingCounts);
-    this.users = luckyUsers;
-  }
-
-  private getLuckyUsers(
-    users: User[],
-    bookingCounts: {
-      username: string | null;
-      bookingCount: number;
-    }[]
-  ) {
-    if (!bookingCounts.length) users.slice(0, 1);
-
-    const [firstMostAvailableUser] = bookingCounts.sort((a, b) => (a.bookingCount > b.bookingCount ? 1 : -1));
-    const luckyUser = users.find((user) => user.username === firstMostAvailableUser?.username);
-    return luckyUser ? [luckyUser] : users;
   }
 
   public async buildTeamMembers() {
@@ -261,6 +207,12 @@ export class CalendarEventBuilder implements ICalendarEventBuilder {
     this.calendarEvent.hideCalendarNotes = hideCalendarNotes;
   }
 
+  public setHideCalendarEventDetails(
+    hideCalendarEventDetails: CalendarEventClass["hideCalendarEventDetails"]
+  ) {
+    this.calendarEvent.hideCalendarEventDetails = hideCalendarEventDetails;
+  }
+
   public setDescription(description: CalendarEventClass["description"]) {
     this.calendarEvent.description = description;
   }
@@ -280,8 +232,7 @@ export class CalendarEventBuilder implements ICalendarEventBuilder {
   public async setUsersFromId(userId: User["id"]) {
     let resultUser: User | null;
     try {
-      resultUser = await prisma.user.findUnique({
-        rejectOnNotFound: true,
+      resultUser = await prisma.user.findUniqueOrThrow({
         where: {
           id: userId,
         },
@@ -293,30 +244,16 @@ export class CalendarEventBuilder implements ICalendarEventBuilder {
     }
   }
 
-  public buildRescheduleLink(booking: Partial<Booking>, eventType?: CalendarEventBuilder["eventType"]) {
+  public buildRescheduleLink({
+    allowRescheduleForCancelledBooking = false,
+  }: {
+    allowRescheduleForCancelledBooking?: boolean;
+  } = {}) {
     try {
-      if (!booking) {
-        throw new Error("Parameter booking is required to build reschedule link");
-      }
-      const isTeam = !!eventType && !!eventType.teamId;
-      const isDynamic = booking?.dynamicEventSlugRef && booking?.dynamicGroupSlugRef;
-
-      let slug = "";
-      if (isTeam && eventType?.team?.slug) {
-        slug = `/team/${eventType.team?.slug}`;
-      } else if (isDynamic) {
-        const dynamicSlug = isDynamic ? `${booking.dynamicGroupSlugRef}/${booking.dynamicEventSlugRef}` : "";
-        slug = dynamicSlug;
-      } else if (eventType?.slug) {
-        slug = `${this.users[0].username}/${eventType.slug}`;
-      }
-
-      const queryParams = new URLSearchParams();
-      queryParams.set("rescheduleUid", `${booking.uid}`);
-      slug = `${slug}?${queryParams.toString()}`;
-
-      const rescheduleLink = `${process.env.NEXT_PUBLIC_WEBAPP_URL}/${slug}`;
-      this.rescheduleLink = rescheduleLink;
+      this.rescheduleLink = getRescheduleLink({
+        calEvent: this.calendarEvent,
+        allowRescheduleForCancelledBooking,
+      });
     } catch (error) {
       if (error instanceof Error) {
         throw new Error(`buildRescheduleLink.error: ${error.message}`);

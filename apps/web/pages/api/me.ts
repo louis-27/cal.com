@@ -1,45 +1,33 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 
-import { getSession } from "@lib/auth";
-import prisma from "@lib/prisma";
-import { defaultAvatarSrc } from "@lib/profile";
+import { getServerSession } from "@calcom/features/auth/lib/getServerSession";
+import { performance } from "@calcom/lib/server/perfObserver";
 
-/**
- * @deprecated Use TRCP's viewer.me query
- */
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const session = await getSession({ req });
-  if (!session) {
-    res.status(401).json({ message: "Not authenticated" });
-    return;
-  }
+let isCold = true;
 
-  const user = await prisma.user.findUnique({
-    rejectOnNotFound: true,
-    where: {
-      id: session.user.id,
-    },
-    select: {
-      id: true,
-      username: true,
-      name: true,
-      email: true,
-      bio: true,
-      timeZone: true,
-      weekStart: true,
-      startTime: true,
-      endTime: true,
-      bufferTime: true,
-      theme: true,
-      createdDate: true,
-      hideBranding: true,
-      avatar: true,
-    },
-  });
+export default async function handler(req: NextApiRequest, res: NextApiResponse): Promise<void> {
+  const prePrismaDate = performance.now();
+  const prisma = (await import("@calcom/prisma")).default;
+  const preSessionDate = performance.now();
+  const session = await getServerSession({ req, res });
+  if (!session) return res.status(409).json({ message: "Unauthorized" });
+  const preUserDate = performance.now();
+  const user = await prisma.user.findUnique({ where: { id: session.user.id } });
+  if (!user) return res.status(404).json({ message: "No user found" });
+  const lastUpdate = performance.now();
 
-  user.avatar = user.avatar || defaultAvatarSrc({ email: user.email });
+  res.setHeader("x-is-cold", isCold.toString());
+  isCold = false;
 
-  res.status(200).json({
-    user,
+  return res.status(200).json({
+    message: `Hello ${user.name}`,
+    prePrismaDate,
+    prismaDuration: `Prisma took ${preSessionDate - prePrismaDate}ms`,
+    preSessionDate,
+    sessionDuration: `Session took ${preUserDate - preSessionDate}ms`,
+    preUserDate,
+    userDuration: `User took ${lastUpdate - preUserDate}ms`,
+    lastUpdate,
+    wasCold: isCold,
   });
 }

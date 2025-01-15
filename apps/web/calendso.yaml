@@ -103,59 +103,6 @@ paths:
       summary: Reset a user's password
       tags:
         - Authentication
-  "/api/availability/{user}?dateFrom={dateFrom}&dateTo={dateTo}":
-    get:
-      description: "Gets the busy times for a particular user, by username."
-      summary: Gets the busy times for a user
-      tags:
-        - Availability
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema:
-                type: array
-                description: ""
-                minItems: 1
-                uniqueItems: true
-                x-examples:
-                  example-1:
-                    - start: "Fri, 03 Sep 2021 17:00:00 GMT"
-                      end: "Fri, 03 Sep 2021 17:40:00 GMT"
-                items:
-                  type: object
-                  properties:
-                    start:
-                      type: string
-                      minLength: 1
-                    end:
-                      type: string
-                      minLength: 1
-                  required:
-                    - start
-                    - end
-        "500":
-          description: Internal Server Error
-    parameters:
-      - schema:
-          type: string
-        name: user
-        in: path
-        required: true
-        description: The username of who you want to check availability for
-      - schema:
-          type: string
-        name: dateFrom
-        in: path
-        required: true
-        description: The timestamp of which time you want to get busy times from
-      - schema:
-          type: string
-        name: dateTo
-        in: path
-        required: true
-        description: The timestamp of which time you want to get busy times until
   /api/availability/calendar:
     get:
       description: Gets the user's selected calendars.
@@ -277,179 +224,6 @@ paths:
                   type: string
                 integration:
                   type: string
-  /api/availability/day:
-    patch:
-      description: Updates the start and end times for a user's availability.
-      summary: Updates the user's start and end times
-      tags:
-        - Availability
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  message:
-                    type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                startMins:
-                  type: string
-                endMins:
-                  type: string
-                bufferMins:
-                  type: string
-        description: ""
-  /api/availability/eventtype:
-    post:
-      description: Adds a new event type for the user.
-      summary: Adds a new event type
-      tags:
-        - Availability
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                title:
-                  type: string
-                slug:
-                  type: string
-                description:
-                  type: string
-                length:
-                  type: string
-                hidden:
-                  type: boolean
-                requiresConfirmation:
-                  type: boolean
-                locations:
-                  type: array
-                  items: {}
-                eventName:
-                  type: string
-                customInputs:
-                  type: array
-                  items: {}
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  eventType:
-                    type: object
-                    properties:
-                      title:
-                        type: string
-                      slug:
-                        type: string
-                      description:
-                        type: string
-                      length:
-                        type: string
-                      hidden:
-                        type: boolean
-                      requiresConfirmation:
-                        type: boolean
-                      locations:
-                        type: array
-                        items: {}
-                      eventName:
-                        type: string
-                      customInputs:
-                        type: array
-                        items: {}
-        "500":
-          description: Internal Server Error
-    patch:
-      description: Updates an event type for the user.
-      summary: Updates an event type
-      tags:
-        - Availability
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                title:
-                  type: string
-                slug:
-                  type: string
-                description:
-                  type: string
-                length:
-                  type: string
-                hidden:
-                  type: boolean
-                requiresConfirmation:
-                  type: boolean
-                locations:
-                  type: array
-                  items: {}
-                eventName:
-                  type: string
-                customInputs:
-                  type: array
-                  items: {}
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  eventType:
-                    type: object
-                    properties:
-                      title:
-                        type: string
-                      slug:
-                        type: string
-                      description:
-                        type: string
-                      length:
-                        type: string
-                      hidden:
-                        type: boolean
-                      requiresConfirmation:
-                        type: boolean
-                      locations:
-                        type: array
-                        items: {}
-                      eventName:
-                        type: string
-                      customInputs:
-                        type: array
-                        items: {}
-        "500":
-          description: Internal Server Error
-    delete:
-      description: Deletes an event type for the user.
-      summary: Deletes an event type
-      tags:
-        - Availability
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema:
-                type: object
-                properties: {}
-        "500":
-          description: Internal Server Error
   "/api/book/event":
     post:
       description: Creates a booking in the user's calendar.
@@ -599,7 +373,7 @@ paths:
                         - installed: true
                           type: caldav_calendar
                           credential: null
-                          title: CalDav Server
+                          title: CalDav (Beta)
                           imageSrc: integrations/caldav.svg
                           description: For personal and business calendars
                     __N_SSP: true
@@ -771,60 +545,6 @@ paths:
       summary: Gets and stores the OAuth token
       tags:
         - Integrations
-  /api/user/profile:
-    patch:
-      description: Updates a user's profile.
-      summary: Updates a user's profile
-      tags:
-        - User
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                name:
-                  type: string
-                description:
-                  type: string
-                avatar:
-                  type: string
-                timeZone:
-                  type: string
-                weekStart:
-                  type: string
-                hideBranding:
-                  type: string
-                theme:
-                  type: string
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  message:
-                    type: string
-        "401":
-          description: Unauthorized
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  message:
-                    type: string
-        "500":
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  message:
-                    type: string
   /api/me:
     get:
       description: Gets current user's profile.
@@ -859,71 +579,6 @@ paths:
                 properties:
                   message:
                     type: string
-  /api/user/membership:
-    get:
-      description: Get a list of the teams the user has joined.
-      summary: Get the teams a user is joined to
-      tags:
-        - User
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  message:
-                    type: string
-        "401":
-          description: Unauthorized
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  message:
-                    type: string
-        "500":
-          description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  message:
-                    type: string
-    patch:
-      description: Accept team invitation
-      summary: Accept team invitation.
-      tags:
-        - User
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                teamId:
-                  type: string
-    delete:
-      description: Leave team or decline membership invite of current user
-      summary: Leave team or decline team invite.
-      tags:
-        - User
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                teamId:
-                  type: string
   "/api/{team}":
     delete:
       description: Deletes a team
@@ -976,8 +631,7 @@ paths:
                   type: string
                 role:
                   type: string
-                sendEmailInvitation:
-                  type: boolean
+                  
     parameters:
       - schema:
           type: string

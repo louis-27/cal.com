@@ -1,39 +1,28 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { v4 } from "uuid";
 
-import findValidApiKey from "@calcom/ee/lib/api/findValidApiKey";
-import prisma from "@calcom/prisma";
+import { addSubscription } from "@calcom/features/webhooks/lib/scheduleTrigger";
+import { defaultHandler, defaultResponder } from "@calcom/lib/server";
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const apiKey = req.query.apiKey as string;
+import { validateAccountOrApiKey } from "../../lib/validateAccountOrApiKey";
 
-  if (!apiKey) {
-    return res.status(401).json({ message: "No API key provided" });
-  }
-
-  const validKey = await findValidApiKey(apiKey, "zapier");
-
-  if (!validKey) {
-    return res.status(401).json({ message: "API key not valid" });
-  }
-
+async function handler(req: NextApiRequest, res: NextApiResponse) {
   const { subscriberUrl, triggerEvent } = req.body;
+  const { account, appApiKey } = await validateAccountOrApiKey(req, ["READ_BOOKING", "READ_PROFILE"]);
+  const createAppSubscription = await addSubscription({
+    appApiKey,
+    account,
+    triggerEvent: triggerEvent,
+    subscriberUrl: subscriberUrl,
+    appId: "zapier",
+  });
 
-  if (req.method === "POST") {
-    try {
-      const createSubscription = await prisma.webhook.create({
-        data: {
-          id: v4(),
-          userId: validKey.userId,
-          eventTriggers: [triggerEvent],
-          subscriberUrl,
-          active: true,
-          appId: "zapier",
-        },
-      });
-      res.status(200).json(createSubscription);
-    } catch (error) {
-      return res.status(500).json({ message: "Could not create subscription." });
-    }
+  if (!createAppSubscription) {
+    return res.status(500).json({ message: "Could not create subscription." });
   }
+
+  res.status(200).json(createAppSubscription);
 }
+
+export default defaultHandler({
+  POST: Promise.resolve({ default: defaultResponder(handler) }),
+});

@@ -17,10 +17,11 @@ export type WorkingHours = {
   endTime: number;
 };
 
-export type CurrentSeats = {
-  uid: string;
-  startTime: string;
-  _count: {
-    attendees: number;
-  };
+export type TravelSchedule = {
+  id: number;
+  timeZone: string;
+  userId: number;
+  startDate: Date;
+  endDate: Date | null;
+  prevTimeZone: string | null;
 };

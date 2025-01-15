@@ -1,15 +1,11 @@
-import { expect, it } from "@jest/globals";
-import dayjs from "dayjs";
-import timezone from "dayjs/plugin/timezone";
-import utc from "dayjs/plugin/utc";
-import MockDate from "mockdate";
+import { expect, it, vi, beforeAll } from "vitest";
 
-import { getWorkingHours } from "@lib/availability";
+import dayjs from "@calcom/dayjs";
+import { getWorkingHours } from "@calcom/lib/availability";
 
-dayjs.extend(utc);
-dayjs.extend(timezone);
-
-MockDate.set("2021-06-20T11:59:59Z");
+beforeAll(() => {
+  vi.setSystemTime(new Date("2021-06-20T11:59:59Z"));
+});
 
 it("correctly translates Availability (UTC+0) to UTC workingHours", async () => {
   expect(

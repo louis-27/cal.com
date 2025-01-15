@@ -1,84 +1,75 @@
-import { IdentityProvider } from "@prisma/client";
-import { NextApiRequest, NextApiResponse } from "next";
+import type { NextApiResponse } from "next";
 
-import { hashPassword } from "@lib/auth";
-import prisma from "@lib/prisma";
-import slugify from "@lib/slugify";
+import calcomSignupHandler from "@calcom/feature-auth/signup/handlers/calcomHandler";
+import selfHostedSignupHandler from "@calcom/feature-auth/signup/handlers/selfHostedHandler";
+import { type RequestWithUsernameStatus } from "@calcom/features/auth/signup/username";
+import { getFeatureFlag } from "@calcom/features/flags/server/utils";
+import { IS_PREMIUM_USERNAME_ENABLED } from "@calcom/lib/constants";
+import getIP from "@calcom/lib/getIP";
+import { HttpError } from "@calcom/lib/http-error";
+import logger from "@calcom/lib/logger";
+import { checkCfTurnstileToken } from "@calcom/lib/server/checkCfTurnstileToken";
+import { signupSchema } from "@calcom/prisma/zod-utils";
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== "POST") {
-    return;
-  }
+async function ensureSignupIsEnabled(req: RequestWithUsernameStatus) {
+  const { token } = signupSchema
+    .pick({
+      token: true,
+    })
+    .parse(req.body);
 
-  const data = req.body;
-  const { email, password } = data;
-  const username = slugify(data.username);
-  const userEmail = email.toLowerCase();
+  // Still allow signups if there is a team invite
+  if (token) return;
 
-  if (!username) {
-    res.status(422).json({ message: "Invalid username" });
-    return;
-  }
+  const prisma = await import("@calcom/prisma").then((mod) => mod.default);
+  const signupDisabled = await getFeatureFlag(prisma, "disable-signup");
 
-  if (!userEmail || !userEmail.includes("@")) {
-    res.status(422).json({ message: "Invalid email" });
-    return;
-  }
-
-  if (!password || password.trim().length < 7) {
-    res.status(422).json({ message: "Invalid input - password should be at least 7 characters long." });
-    return;
-  }
-
-  // There is actually an existingUser if username matches
-  // OR if email matches and both username and password are set
-  const existingUser = await prisma.user.findFirst({
-    where: {
-      OR: [
-        { username },
-        {
-          AND: [{ email: userEmail }, { password: { not: null } }, { username: { not: null } }],
-        },
-      ],
-    },
-  });
-
-  if (existingUser) {
-    const message: string =
-      existingUser.email !== userEmail ? "Username already taken" : "Email address is already registered";
-
-    return res.status(409).json({ message });
-  }
-
-  const hashedPassword = await hashPassword(password);
-
-  const user = await prisma.user.upsert({
-    where: { email: userEmail },
-    update: {
-      username,
-      password: hashedPassword,
-      emailVerified: new Date(Date.now()),
-      identityProvider: IdentityProvider.CAL,
-    },
-    create: {
-      username,
-      email: userEmail,
-      password: hashedPassword,
-      identityProvider: IdentityProvider.CAL,
-    },
-  });
-
-  // If user has been invitedTo a team, we accept the membership
-  if (user.invitedTo) {
-    await prisma.membership.update({
-      where: {
-        userId_teamId: { userId: user.id, teamId: user.invitedTo },
-      },
-      data: {
-        accepted: true,
-      },
+  if (process.env.NEXT_PUBLIC_DISABLE_SIGNUP === "true" || signupDisabled) {
+    throw new HttpError({
+      statusCode: 403,
+      message: "Signup is disabled",
     });
   }
+}
 
-  res.status(201).json({ message: "Created user" });
+function ensureReqIsPost(req: RequestWithUsernameStatus) {
+  if (req.method !== "POST") {
+    throw new HttpError({
+      statusCode: 405,
+      message: "Method not allowed",
+    });
+  }
+}
+
+export default async function handler(req: RequestWithUsernameStatus, res: NextApiResponse) {
+  const remoteIp = getIP(req);
+  // Use a try catch instead of returning res every time
+  try {
+    await checkCfTurnstileToken({
+      token: req.headers["cf-access-token"] as string,
+      remoteIp,
+    });
+
+    ensureReqIsPost(req);
+    await ensureSignupIsEnabled(req);
+
+    /**
+     * Im not sure its worth merging these two handlers. They are different enough to be separate.
+     * Calcom handles things like creating a stripe customer - which we don't need to do for self hosted.
+     * It also handles things like premium username.
+     * TODO: (SEAN) - Extract a lot of the logic from calcomHandler into a separate file and import it into both handlers.
+     * @zomars: We need to be able to test this with E2E. They way it's done RN it will never run on CI.
+     */
+    if (IS_PREMIUM_USERNAME_ENABLED) {
+      return await calcomSignupHandler(req, res);
+    }
+
+    return await selfHostedSignupHandler(req, res);
+  } catch (e) {
+    if (e instanceof HttpError) {
+      return res.status(e.statusCode).json({ message: e.message });
+    }
+    logger.error(e);
+    return res.status(500).json({ message: "Internal server error" });
+  }
 }

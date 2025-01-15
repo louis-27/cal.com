@@ -1,9 +1,20 @@
-export function DynamicComponent<T extends Record<string, any>>(props: { componentMap: T; slug: string }) {
-  const { componentMap, slug, ...rest } = props;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function DynamicComponent<T extends Record<string, React.ComponentType<any>>>(props: {
+  componentMap: T;
+  slug: string;
+  wrapperClassName?: string;
+}) {
+  const { componentMap, slug, wrapperClassName, ...rest } = props;
+  const dirName = slug === "stripe" ? "stripepayment" : slug;
 
-  if (!componentMap[slug]) return null;
+  // There can be apps with no matching component
+  if (!componentMap[dirName]) return null;
 
-  const Component = componentMap[slug];
+  const Component = componentMap[dirName];
 
-  return <Component {...rest} />;
+  return (
+    <div className={wrapperClassName || ""}>
+      <Component {...rest} />
+    </div>
+  );
 }

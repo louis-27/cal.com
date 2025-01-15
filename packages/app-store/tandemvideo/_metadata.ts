@@ -1,6 +1,5 @@
-import type { App } from "@calcom/types/App";
+import type { AppMeta } from "@calcom/types/App";
 
-import { LocationType } from "../locations";
 import _package from "./package.json";
 
 export const metadata = {
@@ -8,21 +7,24 @@ export const metadata = {
   description: _package.description,
   type: "tandem_video",
   title: "Tandem Video",
-  imageSrc: "/api/app-store/tandemvideo/icon.svg",
   variant: "conferencing",
+  categories: ["conferencing"],
   slug: "tandem",
-  category: "video",
-  logo: "/api/app-store/tandemvideo/icon.svg",
+  category: "conferencing",
+  logo: "icon.svg",
   publisher: "",
   url: "",
-  verified: true,
-  trending: true,
-  rating: 0,
-  reviews: 0,
   isGlobal: false,
   email: "help@cal.com",
-  locationType: LocationType.Tandem,
-  locationLabel: "Tandem Video",
-} as App;
+  appData: {
+    location: {
+      linkType: "dynamic",
+      type: "integrations:tandem",
+      label: "Tandem Video",
+    },
+  },
+  dirName: "tandemvideo",
+  isOAuth: true,
+} as AppMeta;
 
 export default metadata;

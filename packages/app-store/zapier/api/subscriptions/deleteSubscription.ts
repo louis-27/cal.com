@@ -1,29 +1,34 @@
 import type { NextApiRequest, NextApiResponse } from "next";
+import z from "zod";
 
-import findValidApiKey from "@calcom/ee/lib/api/findValidApiKey";
-import prisma from "@calcom/prisma";
+import { deleteSubscription } from "@calcom/features/webhooks/lib/scheduleTrigger";
+import { defaultHandler, defaultResponder } from "@calcom/lib/server";
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const apiKey = req.query.apiKey as string;
+import { validateAccountOrApiKey } from "../../lib/validateAccountOrApiKey";
 
-  if (!apiKey) {
-    return res.status(401).json({ message: "No API key provided" });
+const querySchema = z.object({
+  apiKey: z.string(),
+  id: z.string(),
+});
+
+async function handler(req: NextApiRequest, res: NextApiResponse) {
+  const { id } = querySchema.parse(req.query);
+
+  const { account, appApiKey } = await validateAccountOrApiKey(req, ["READ_BOOKING", "READ_PROFILE"]);
+
+  const deleteEventSubscription = await deleteSubscription({
+    appApiKey,
+    account,
+    webhookId: id,
+    appId: "zapier",
+  });
+
+  if (!deleteEventSubscription) {
+    return res.status(500).json({ message: "Could not delete subscription." });
   }
-
-  const validKey = await findValidApiKey(apiKey, "zapier");
-
-  if (!validKey) {
-    return res.status(401).json({ message: "API key not valid" });
-  }
-
-  const id = req.query.id as string;
-
-  if (req.method === "DELETE") {
-    await prisma.webhook.delete({
-      where: {
-        id,
-      },
-    });
-    res.status(204).json({ message: "Subscription is deleted." });
-  }
+  res.status(204).json({ message: "Subscription is deleted." });
 }
+
+export default defaultHandler({
+  DELETE: Promise.resolve({ default: defaultResponder(handler) }),
+});
